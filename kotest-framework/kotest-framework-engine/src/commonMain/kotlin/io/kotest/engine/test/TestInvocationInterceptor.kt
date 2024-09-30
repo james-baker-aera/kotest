@@ -7,6 +7,7 @@ import io.kotest.core.test.TestResult
 import io.kotest.core.test.TestScope
 import io.kotest.engine.concurrency.replay
 import io.kotest.engine.test.interceptors.TestExecutionInterceptor
+import io.kotest.engine.test.interceptors.NextTestExecutionInterceptor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlin.time.Duration
@@ -24,7 +25,7 @@ internal class TestInvocationInterceptor(
    override suspend fun intercept(
       testCase: TestCase,
       scope: TestScope,
-      test: suspend (TestCase, TestScope) -> TestResult,
+      test: NextTestExecutionInterceptor,
    ): TestResult {
       return try {
          invokeWithRetry(testCase, scope, test, 0)
@@ -87,9 +88,9 @@ internal class TestInvocationInterceptor(
       testCase: TestCase,
       scope: TestScope,
       times: Int,
-      test: suspend (TestCase, TestScope) -> TestResult,
+      test: NextTestExecutionInterceptor,
    ) {
-      val executeWithBeforeAfter: suspend (TestCase, TestScope) -> TestResult = { tc, sc ->
+      val executeWithBeforeAfter = NextTestExecutionInterceptor { tc, sc ->
          try {
             extensions.beforeInvocation(tc, times)
             test(tc, sc)
@@ -98,8 +99,8 @@ internal class TestInvocationInterceptor(
          }
       }
 
-      val wrappedTest = invocationInterceptors.foldRight(executeWithBeforeAfter) { ext, fn ->
-         { tc, sc -> ext.intercept(tc, sc, fn) }
+      val wrappedTest: NextTestExecutionInterceptor = invocationInterceptors.foldRight(executeWithBeforeAfter) { ext, fn ->
+         NextTestExecutionInterceptor { tc, sc -> ext.intercept(tc, sc, fn) }
       }
 
       wrappedTest(testCase, scope)
